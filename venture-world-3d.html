@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Venture World 3D</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#8db7d5;font-family:Arial,sans-serif;touch-action:none}
+#game{position:fixed;inset:0}
+#hud{position:fixed;top:12px;left:12px;color:white;background:#071521b8;padding:10px 14px;border:1px solid #ffffff35;border-radius:10px;font-size:13px;z-index:3}
+#help{position:fixed;top:12px;right:12px;color:white;background:#071521b8;padding:9px 12px;border-radius:10px;font-size:12px;z-index:3}
+#stick{position:fixed;left:24px;bottom:28px;width:128px;height:128px;border-radius:50%;background:#ffffff28;border:2px solid #ffffff80;z-index:4;touch-action:none}
+#nub{position:absolute;width:54px;height:54px;left:35px;top:35px;border-radius:50%;background:#ffffffb8;box-shadow:0 2px 10px #0005}
+#look{position:fixed;right:20px;bottom:30px;width:105px;height:105px;border-radius:50%;background:#ffffff20;border:2px solid #ffffff65;color:white;display:grid;place-items:center;font-size:12px;z-index:4}
+#status{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);color:white;background:#071521b8;padding:7px 12px;border-radius:8px;font-size:11px;white-space:nowrap}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="hud"><b>VENTURE WORLD 3D</b><br>REAL WORLD EDITION<br><span id="coords">Loading city...</span></div>
+<div id="help">WASD / arrows to move<br>Drag right side to look</div>
+<div id="stick"><div id="nub"></div></div>
+<div id="look">LOOK</div>
+<div id="status">Explore the city • Mobile controls enabled</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x91b9d6);
+scene.fog = new THREE.Fog(0x91b9d6, 100, 440);
+
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, .1, 700);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.querySelector('#game').appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xdceeff,0x66705a,2.0));
+const sun = new THREE.DirectionalLight(0xfff0d6,2.3);
+sun.position.set(-90,140,80); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left=-180; sun.shadow.camera.right=180;
+sun.shadow.camera.top=180; sun.shadow.camera.bottom=-180;
+scene.add(sun);
+
+const mat=(color,roughness=.85)=>new THREE.MeshStandardMaterial({color,roughness});
+const groundMat=mat(0x647b55), roadMat=mat(0x292e34), sidewalkMat=mat(0xb8b5a9);
+const white=mat(0xe9e6d7), yellow=mat(0xe8c64c);
+const world=new THREE.Group(); scene.add(world);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(600,600),groundMat);
+ground.rotation.x=-Math.PI/2; ground.position.y=-.12; ground.receiveShadow=true; world.add(ground);
+
+function cube(parent,x,y,z,sx,sy,sz,material,shadow=true){
+ const m=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),material);
+ m.position.set(x,y,z); m.castShadow=shadow; m.receiveShadow=true; parent.add(m); return m;
+}
+function road(x,z,w,d){
+ cube(world,x,-.025,z,w,.12,d,roadMat,false);
+ // lane dashes
+ if(w>d){
+  for(let p=-w/2+5;p<w/2-3;p+=10) cube(world,x+p,.043,z,.0+4,.025,.22,yellow,false);
+ }else{
+  for(let p=-d/2+5;p<d/2-3;p+=10) cube(world,x,.043,z+p,.22,.025,4,yellow,false);
+ }
+}
+const blockSize=58, street=18, spacing=blockSize+street;
+for(let i=-4;i<=4;i++){road(i*spacing,0,street,520);road(0,i*spacing,520,street);}
+for(let i=-4;i<=4;i++)for(let j=-4;j<=4;j++){
+ const cx=i*spacing, cz=j*spacing;
+ // sidewalks around each city block
+ cube(world,cx,0.08,cz,blockSize,.18,blockSize,sidewalkMat,false);
+ // building plots, leave gaps for alleys
+ const count=3+Math.floor(Math.random()*3);
+ for(let k=0;k<count;k++){
+  const bw=9+Math.random()*10, bd=9+Math.random()*10;
+  const bx=cx+(Math.random()-.5)*36, bz=cz+(Math.random()-.5)*36;
+  const floors=2+Math.floor(Math.random()*13), bh=floors*(2.7+Math.random()*.25);
+  const palette=[0xaaa79c,0x9babb2,0xc2b49e,0x777f86,0xd0c8b8,0x8e9992,0x6e8490];
+  const buildingMat=mat(palette[Math.floor(Math.random()*palette.length)]);
+  cube(world,bx,bh/2+.2,bz,bw,bh,bd,buildingMat);
+  // rooftop structure
+  if(Math.random()>.55) cube(world,bx,bh+.9,bz,bw*.35,1.8,bd*.35,mat(0x60666a));
+  // window grids on front and back
+  const winMat=new THREE.MeshStandardMaterial({color:0x243f52,metalness:.25,roughness:.25,emissive:0x152c3a,emissiveIntensity:.15});
+  const rows=Math.min(14,Math.floor(bh/2.6));
+  for(let r=0;r<rows;r++)for(let c=0;c<Math.max(2,Math.floor(bw/2.5));c++){
+   const wx=bx-bw/2+1.3+c*(bw-2.2)/Math.max(1,Math.floor(bw/2.5)-1);
+   const wy=1.5+r*2.55;
+   if(wy<bh-.7){
+    cube(world,wx,wy,bz+bd/2+.012,.85,1.15,.035,winMat,false);
+    cube(world,wx,wy,bz-bd/2-.012,.85,1.15,.035,winMat,false);
+   }
+  }
+ }
+}
+// Street lamps
+const poleMat=mat(0x343a3d), lampMat=new THREE.MeshStandardMaterial({color:0xfff0bd,emissive:0xffd37b,emissiveIntensity:.7});
+for(let x=-4;x<=4;x++)for(let z=-4;z<=4;z++){
+ for(const side of [-1,1]){
+  const px=x*spacing+side*11, pz=z*spacing+11;
+  cube(world,px,2.8,pz,.16,5.6,.16,poleMat,false);
+  cube(world,px+.65,5.4,pz,.16,.16,1.3,poleMat,false);
+  cube(world,px+.65,5.25,pz,.7,.16,.7,lampMat,false);
+ }
+}
+
+// Player character: simple articulated human figure
+const player=new THREE.Group(); scene.add(player);
+const skin=mat(0xb77d58), shirt=mat(0x245b86), pants=mat(0x252b36), shoe=mat(0x17191b);
+const torso=cube(player,0,1.35,0,.68,.85,.36,shirt);
+const head=new THREE.Mesh(new THREE.SphereGeometry(.23,16,12),skin); head.position.y=2.0; head.castShadow=true; player.add(head);
+const arms=[],legs=[];
+for(const side of [-1,1]){
+ const arm=cube(player,side*.48,1.38,0,.2,.72,.22,shirt); arm.position.x=side*.48; arms.push(arm);
+ const leg=cube(player,side*.19,.48,0,.25,.85,.28,pants); legs.push(leg);
+ cube(player,side*.19,.08,-.06,.27,.16,.43,shoe);
+}
+player.position.set(0,0,8);
+let heading=0, moveX=0,moveY=0, walking=0;
+
+// People wandering on sidewalks
+const pedestrians=[];
+function makePerson(x,z){
+ const p=new THREE.Group();
+ const skinM=mat([0x8d5d42,0xb77d58,0xd19b73][Math.floor(Math.random()*3)]);
+ const clothes=mat([0x9c493b,0x315e49,0x394f85,0xb7a15b,0x55545d][Math.floor(Math.random()*5)]);
+ const body=cube(p,0,1.05,0,.42,.72,.25,clothes);
+ const h=new THREE.Mesh(new THREE.SphereGeometry(.17,12,10),skinM);h.position.y=1.55;p.add(h);
+ const l1=cube(p,-.12,.4,0,.14,.65,.16,pants); const l2=cube(p,.12,.4,0,.14,.65,.16,pants);
+ p.position.set(x,0,z);scene.add(p);
+ pedestrians.push({mesh:p,dir:Math.random()*6.28,speed:0.45+Math.random()*.55,phase:Math.random()*6,left:l1,right:l2});
+}
+for(let i=0;i<48;i++){
+ const x=(Math.floor(Math.random()*9)-4)*spacing+(Math.random()-.5)*50;
+ const z=(Math.floor(Math.random()*9)-4)*spacing+(Math.random()-.5)*50;
+ makePerson(x,z);
+}
+
+// Vehicles move along city streets
+const cars=[];
+const carColors=[0xc9362e,0xeeeeea,0x1c354c,0xd4a52c,0x34383b,0x527c69,0x777c87];
+function makeCar(axis,lane,position){
+ const g=new THREE.Group(), color=mat(carColors[Math.floor(Math.random()*carColors.length)],.38);
+ cube(g,0,.62,0,2.05,.72,4.1,color);
+ cube(g,0,1.15,-.25,1.65,.65,2.05,mat(0x344b5b,.3));
+ const glass=mat(0x203847,.25);
+ cube(g,0,1.18,.85,1.55,.52,.08,glass);cube(g,0,1.18,-1.35,1.55,.52,.08,glass);
+ const tire=mat(0x151719);
+ for(const sx of [-.95,.95])for(const sz of [-1.3,1.3]){
+  const w=new THREE.Mesh(new THREE.CylinderGeometry(.38,.38,.22,12),tire);
+  w.rotation.z=Math.PI/2;w.position.set(sx,.38,sz);g.add(w);
+ }
+ const light=mat(0xffe8b0),tail=mat(0xe22d24);
+ cube(g,-.65,.7,2.06,.35,.2,.05,light,false);cube(g,.65,.7,2.06,.35,.2,.05,light,false);
+ cube(g,-.65,.7,-2.06,.35,.2,.05,tail,false);cube(g,.65,.7,-2.06,.35,.2,.05,tail,false);
+ scene.add(g);
+ cars.push({mesh:g,axis,lane,pos:position,speed:7+Math.random()*7});
+}
+for(let i=0;i<28;i++){
+ const vertical=Math.random()>.5, lane=(Math.random()>.5?1:-1)*5.0;
+ makeCar(vertical?'z':'x',lane,(Math.random()-.5)*500);
+}
+
+const keys={};
+addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
+const stick=document.querySelector('#stick'),nub=document.querySelector('#nub');
+let stickId=null;
+function setStick(e){
+ const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
+ let dx=e.clientX-cx,dy=e.clientY-cy, len=Math.hypot(dx,dy),max=43;
+ if(len>max){dx=dx/len*max;dy=dy/len*max;}
+ nub.style.transform=`translate(${dx}px,${dy}px)`;
+ moveX=dx/max;moveY=-dy/max;
+}
+stick.addEventListener('pointerdown',e=>{stickId=e.pointerId;stick.setPointerCapture(stickId);setStick(e);});
+stick.addEventListener('pointermove',e=>{if(e.pointerId===stickId)setStick(e);});
+function resetStick(){stickId=null;moveX=moveY=0;nub.style.transform='translate(0,0)';}
+stick.addEventListener('pointerup',resetStick);stick.addEventListener('pointercancel',resetStick);
+
+// Drag on right half of screen to rotate camera
+let lookId=null,lastX=0,lastY=0,camYaw=0,camPitch=.22;
+renderer.domElement.addEventListener('pointerdown',e=>{if(e.clientX>innerWidth*.42){lookId=e.pointerId;lastX=e.clientX;lastY=e.clientY;}});
+renderer.domElement.addEventListener('pointermove',e=>{
+ if(e.pointerId===lookId){camYaw-=(e.clientX-lastX)*.006;camPitch=THREE.MathUtils.clamp(camPitch+(e.clientY-lastY)*.003,-.05,.65);lastX=e.clientX;lastY=e.clientY;}
+});
+renderer.domElement.addEventListener('pointerup',()=>lookId=null);
+renderer.domElement.addEventListener('pointercancel',()=>lookId=null);
+
+const clock=new THREE.Clock();
+const forward=new THREE.Vector3(),right=new THREE.Vector3(),desired=new THREE.Vector3();
+function animate(){
+ requestAnimationFrame(animate);
+ const dt=Math.min(clock.getDelta(),.04);
+ const kx=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0);
+ const ky=(keys.w||keys.arrowup?1:0)-(keys.s||keys.arrowdown?1:0);
+ const ix=THREE.MathUtils.clamp(kx+moveX,-1,1), iy=THREE.MathUtils.clamp(ky+moveY,-1,1);
+ forward.set(Math.sin(heading),0,Math.cos(heading));
+ right.set(forward.z,0,-forward.x);
+ desired.copy(forward).multiplyScalar(iy).addScaledVector(right,ix);
+ if(desired.lengthSq()>.01){
+  desired.normalize();player.position.addScaledVector(desired,dt*8);
+  heading=Math.atan2(desired.x,desired.z);
+  player.rotation.y=heading;
+  walking+=dt*10;
+  legs[0].rotation.x=Math.sin(walking)*.65;legs[1].rotation.x=-Math.sin(walking)*.65;
+  arms[0].rotation.x=-Math.sin(walking)*.45;arms[1].rotation.x=Math.sin(walking)*.45;
+ }else{
+  legs.forEach(l=>l.rotation.x*=.8);arms.forEach(a=>a.rotation.x*=.8);
+ }
+ // keep player in city bounds
+ player.position.x=THREE.MathUtils.clamp(player.position.x,-260,260);
+ player.position.z=THREE.MathUtils.clamp(player.position.z,-260,260);
+
+ for(const c of cars){
+  c.pos+=c.speed*dt*(c.axis==='x'?1:1);
+  if(c.pos>260)c.pos=-260;
+  if(c.axis==='x'){c.mesh.position.set(c.pos,.05,c.lane);c.mesh.rotation.y=Math.PI/2;}
+  else{c.mesh.position.set(c.lane,.05,c.pos);c.mesh.rotation.y=0;}
+ }
+ for(const p of pedestrians){
+  p.phase+=dt*p.speed*5;
+  p.mesh.position.x+=Math.sin(p.dir)*p.speed*dt;
+  p.mesh.position.z+=Math.cos(p.dir)*p.speed*dt;
+  if(Math.random()<.004)p.dir+=(Math.random()-.5)*2;
+  if(Math.abs(p.mesh.position.x)>275||Math.abs(p.mesh.position.z)>275)p.dir+=Math.PI;
+  p.left.rotation.x=Math.sin(p.phase)*.45;p.right.rotation.x=-Math.sin(p.phase)*.45;
+ }
+ // third-person follow camera
+ const distance=8.5;
+ const target=new THREE.Vector3(player.position.x,2.1,player.position.z);
+ const camX=Math.sin(camYaw)*Math.cos(camPitch)*distance;
+ const camZ=Math.cos(camYaw)*Math.cos(camPitch)*distance;
+ camera.position.set(target.x+camX,target.y+3+Math.sin(camPitch)*distance,target.z+camZ);
+ camera.lookAt(target);
+ document.querySelector('#coords').textContent=`Position: ${Math.round(player.position.x)}, ${Math.round(player.position.z)}`;
+ renderer.render(scene,camera);
+}
+animate();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+</script>
+</body>
+</html>
