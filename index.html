@@ -1,0 +1,523 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Venture World 3D</title>
+
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  overflow: hidden;
+  font-family: Arial, sans-serif;
+  background: #87ceeb;
+  touch-action: none;
+}
+#hud {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  color: white;
+  background: #102030cc;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-weight: bold;
+}
+#help {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  color: white;
+  background: #102030bb;
+  padding: 10px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+#controls {
+  position: fixed;
+  bottom: 22px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  pointer-events: none;
+}
+#stick {
+  width: 125px;
+  height: 125px;
+  border-radius: 50%;
+  background: #ffffff40;
+  border: 3px solid #ffffff90;
+  position: relative;
+  pointer-events: auto;
+  touch-action: none;
+}
+#knob {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: white;
+  position: absolute;
+  left: 35px;
+  top: 35px;
+}
+#actions { display: flex; gap: 12px; }
+.action {
+  width: 65px;
+  height: 65px;
+  border-radius: 50%;
+  border: 2px solid white;
+  background: #1677ddcc;
+  color: white;
+  font-size: 13px;
+  font-weight: bold;
+  pointer-events: auto;
+  touch-action: none;
+}
+#jump { background: #e87920dd; }
+#message {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%,-50%);
+  color: white;
+  background: #102030bb;
+  padding: 15px 22px;
+  border-radius: 12px;
+  pointer-events: none;
+  text-align: center;
+}
+@media (min-width: 900px) {
+  #controls { opacity: .45; }
+}
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"
+  }
+}
+</script>
+</head>
+
+<body>
+
+<div id="hud">
+  🌍 VENTURE WORLD<br>
+  🪙 Coins: <span id="score">0</span><br>
+  <span id="status">Explore the world!</span>
+</div>
+
+<div id="help">
+  PC: WASD / Arrow Keys<br>
+  Mouse: Rotate Camera<br>
+  Space: Jump
+</div>
+
+<div id="message">
+  WELCOME TO VENTURE WORLD<br>
+  Explore and collect coins!
+</div>
+
+<div id="controls">
+  <div id="stick"><div id="knob"></div></div>
+  <div id="actions">
+    <button class="action" id="jump">JUMP</button>
+    <button class="action" id="run">RUN</button>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from "three";
+
+// SCENE
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0x87ceeb, 60, 190);
+
+// CAMERA
+const camera = new THREE.PerspectiveCamera(
+  70, innerWidth / innerHeight, 0.1, 400
+);
+
+// RENDERER
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+// LIGHTS
+scene.add(new THREE.HemisphereLight(0xffffff, 0x526b35, 2));
+
+const sun = new THREE.DirectionalLight(0xffffff, 2);
+sun.position.set(40, 70, 30);
+sun.castShadow = true;
+scene.add(sun);
+
+// MATERIALS
+const green = new THREE.MeshStandardMaterial({color: 0x65ad45});
+const roadMat = new THREE.MeshStandardMaterial({color: 0x55585c});
+const brown = new THREE.MeshStandardMaterial({color: 0x79502f});
+const leaves = new THREE.MeshStandardMaterial({color: 0x20843b});
+const gold = new THREE.MeshStandardMaterial({
+  color: 0xffd700,
+  metalness: 0.6,
+  roughness: 0.25
+});
+
+// GROUND
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(220, 220),
+  green
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ROADS
+function road(x,z,w,d) {
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(w,0.12,d), roadMat
+  );
+  mesh.position.set(x,0.06,z);
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+}
+
+road(0,0,220,9);
+road(0,0,9,220);
+road(35,30,9,90);
+road(-45,-35,9,100);
+
+// ROADSIDE MARKINGS
+for(let i=-100;i<100;i+=12) {
+  const line = new THREE.Mesh(
+    new THREE.BoxGeometry(0.35,0.04,4),
+    new THREE.MeshBasicMaterial({color:0xffffff})
+  );
+  line.position.set(i,0.14,0);
+  scene.add(line);
+}
+
+// BUILDINGS
+function building(x,z,color) {
+  const h = 5 + Math.random()*7;
+  const material = new THREE.MeshStandardMaterial({color});
+  const house = new THREE.Mesh(
+    new THREE.BoxGeometry(8,h,8), material
+  );
+  house.position.set(x,h/2,z);
+  house.castShadow = true;
+  house.receiveShadow = true;
+  scene.add(house);
+
+  const roof = new THREE.Mesh(
+    new THREE.BoxGeometry(8.5,0.5,8.5),
+    new THREE.MeshStandardMaterial({color:0x40352c})
+  );
+  roof.position.set(x,h+0.2,z);
+  scene.add(roof);
+
+  // Front door
+  const door = new THREE.Mesh(
+    new THREE.BoxGeometry(1.5,2.5,0.15),
+    brown
+  );
+  door.position.set(x,1.25,z+4.08);
+  scene.add(door);
+}
+
+const colors = [0xffcc80,0xf4a261,0xe9c46a,0x8ecae6,0xffafcc];
+
+for(let i=0;i<22;i++) {
+  let x,z;
+  do {
+    x = (Math.random()-.5)*180;
+    z = (Math.random()-.5)*180;
+  } while(Math.abs(x)<13 || Math.abs(z)<13);
+  building(x,z,colors[i%colors.length]);
+}
+
+// TREES
+function tree(x,z) {
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.35,0.5,3,8), brown
+  );
+  trunk.position.set(x,1.5,z);
+  trunk.castShadow = true;
+  scene.add(trunk);
+
+  const crown = new THREE.Mesh(
+    new THREE.SphereGeometry(2.1,9,8), leaves
+  );
+  crown.position.set(x,4,z);
+  crown.castShadow = true;
+  scene.add(crown);
+}
+
+for(let i=0;i<115;i++) {
+  const x=(Math.random()-.5)*200;
+  const z=(Math.random()-.5)*200;
+  if(Math.abs(x)<8 || Math.abs(z)<8) continue;
+  tree(x,z);
+}
+
+// PLAYER
+const player = new THREE.Group();
+
+const skin = new THREE.MeshStandardMaterial({color:0xd99b70});
+const shirt = new THREE.MeshStandardMaterial({color:0x1769aa});
+const pants = new THREE.MeshStandardMaterial({color:0x25334b});
+
+const body = new THREE.Mesh(
+  new THREE.CylinderGeometry(.55,.65,1.5,12),shirt
+);
+body.position.y=1.6;
+player.add(body);
+
+const head = new THREE.Mesh(
+  new THREE.SphereGeometry(.43,16,12),skin
+);
+head.position.y=2.65;
+player.add(head);
+
+const leg1 = new THREE.Mesh(
+  new THREE.BoxGeometry(.32,.85,.4),pants
+);
+leg1.position.set(-.23,.65,0);
+player.add(leg1);
+
+const leg2 = leg1.clone();
+leg2.position.x=.23;
+player.add(leg2);
+
+const arm1 = new THREE.Mesh(
+  new THREE.BoxGeometry(.27,1,.3),skin
+);
+arm1.position.set(-.72,1.6,0);
+player.add(arm1);
+
+const arm2 = arm1.clone();
+arm2.position.x=.72;
+player.add(arm2);
+
+player.position.set(0,0,5);
+scene.add(player);
+
+// COINS
+const coins = [];
+
+for(let i=0;i<30;i++) {
+  const coin = new THREE.Mesh(
+    new THREE.TorusGeometry(.65,.18,8,16),gold
+  );
+  coin.position.set(
+    (Math.random()-.5)*170,
+    1.5,
+    (Math.random()-.5)*170
+  );
+  scene.add(coin);
+  coins.push(coin);
+}
+
+// INPUT
+const keys = {};
+let joyX=0, joyY=0;
+let jumping=false;
+let velocityY=0;
+let score=0;
+let running=false;
+let angle=0;
+
+addEventListener("keydown",e=>{
+  keys[e.key.toLowerCase()]=true;
+  if(e.code==="Space") jump();
+});
+addEventListener("keyup",e=>{
+  keys[e.key.toLowerCase()]=false;
+});
+
+// JOYSTICK
+const stick=document.getElementById("stick");
+const knob=document.getElementById("knob");
+let activePointer=null;
+
+stick.addEventListener("pointerdown",e=>{
+  activePointer=e.pointerId;
+  stick.setPointerCapture(e.pointerId);
+  joystick(e);
+});
+stick.addEventListener("pointermove",e=>{
+  if(e.pointerId===activePointer) joystick(e);
+});
+function joystick(e) {
+  const r=stick.getBoundingClientRect();
+  let x=e.clientX-(r.left+r.width/2);
+  let y=e.clientY-(r.top+r.height/2);
+  const length=Math.hypot(x,y);
+  if(length>38) {
+    x=x/length*38;
+    y=y/length*38;
+  }
+  joyX=x/38;
+  joyY=y/38;
+  knob.style.transform=`translate(${x}px,${y}px)`;
+}
+function resetJoystick() {
+  activePointer=null;
+  joyX=0; joyY=0;
+  knob.style.transform="translate(0,0)";
+}
+stick.addEventListener("pointerup",resetJoystick);
+stick.addEventListener("pointercancel",resetJoystick);
+
+// BUTTONS
+function jump() {
+  if(!jumping) {
+    velocityY=9;
+    jumping=true;
+  }
+}
+document.getElementById("jump").addEventListener("pointerdown",jump);
+document.getElementById("run").addEventListener("pointerdown",()=>{
+  running=true;
+});
+document.getElementById("run").addEventListener("pointerup",()=>{
+  running=false;
+});
+document.getElementById("run").addEventListener("pointercancel",()=>{
+  running=false;
+});
+
+// CAMERA ROTATION WITH MOUSE DRAG
+let dragging=false,lastX=0;
+renderer.domElement.addEventListener("pointerdown",e=>{
+  dragging=true;
+  lastX=e.clientX;
+});
+addEventListener("pointerup",()=>dragging=false);
+addEventListener("pointermove",e=>{
+  if(dragging && e.pointerType==="mouse") {
+    angle-=(e.clientX-lastX)*0.006;
+    lastX=e.clientX;
+  }
+});
+
+// GAME LOOP
+const clock=new THREE.Clock();
+let steps=0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),0.05);
+
+  let forward=0,side=0;
+
+  if(keys["w"]||keys["arrowup"]) forward+=1;
+  if(keys["s"]||keys["arrowdown"]) forward-=1;
+  if(keys["a"]||keys["arrowleft"]) side-=1;
+  if(keys["d"]||keys["arrowright"]) side+=1;
+
+  forward-=joyY;
+  side+=joyX;
+
+  const length=Math.hypot(forward,side);
+  if(length>1) {
+    forward/=length;
+    side/=length;
+  }
+
+  const moving=length>0.08;
+  const speed=running?12:6;
+
+  const dx=(Math.sin(angle)*forward+Math.cos(angle)*side)*speed*dt;
+  const dz=(Math.cos(angle)*forward-Math.sin(angle)*side)*speed*dt;
+
+  player.position.x+=dx;
+  player.position.z+=dz;
+
+  player.position.x=THREE.MathUtils.clamp(player.position.x,-105,105);
+  player.position.z=THREE.MathUtils.clamp(player.position.z,-105,105);
+
+  if(moving) {
+    player.rotation.y=Math.atan2(dx,dz);
+    steps+=dt*12;
+    leg1.rotation.x=Math.sin(steps)*0.7;
+    leg2.rotation.x=-Math.sin(steps)*0.7;
+    arm1.rotation.x=-Math.sin(steps)*0.5;
+    arm2.rotation.x=Math.sin(steps)*0.5;
+  } else {
+    leg1.rotation.x=0;
+    leg2.rotation.x=0;
+    arm1.rotation.x=0;
+    arm2.rotation.x=0;
+  }
+
+  // JUMP
+  if(jumping) {
+    player.position.y+=velocityY*dt;
+    velocityY-=22*dt;
+    if(player.position.y<=0) {
+      player.position.y=0;
+      jumping=false;
+      velocityY=0;
+    }
+  }
+
+  // CAMERA FOLLOW
+  const cameraDistance=10;
+  const cameraHeight=6;
+  const desired=new THREE.Vector3(
+    player.position.x-Math.sin(angle)*cameraDistance,
+    player.position.y+cameraHeight,
+    player.position.z-Math.cos(angle)*cameraDistance
+  );
+  camera.position.lerp(desired,Math.min(1,dt*5));
+  camera.lookAt(
+    player.position.x,
+    player.position.y+1.6,
+    player.position.z
+  );
+
+  // COLLECT COINS
+  for(let i=coins.length-1;i>=0;i--) {
+    const c=coins[i];
+    c.rotation.y+=dt*2;
+    c.position.y=1.5+Math.sin(clock.elapsedTime*3+i)*.2;
+
+    if(c.position.distanceTo(player.position)<2.1) {
+      scene.remove(c);
+      coins.splice(i,1);
+      score++;
+      document.getElementById("score").textContent=score;
+      document.getElementById("status").textContent="Great! Keep exploring!";
+    }
+  }
+
+  renderer.render(scene,camera);
+}
+
+camera.position.set(0,6,15);
+animate();
+
+setTimeout(()=>{
+  document.getElementById("message").style.display="none";
+},3500);
+
+// RESIZE
+addEventListener("resize",()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
